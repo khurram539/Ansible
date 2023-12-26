@@ -1,0 +1,16 @@
+---
+- name: Playbook to install software
+  become: true
+  hosts: all
+
+  tasks:
+  - name: ensure docker is installed
+    apt:
+      name: docker.io
+      state: present
+      update_cache: true 
+  - name: ensure apache2 is installed     
+    apt:
+      name: apache2
+      state: present
+      update_cache: true
