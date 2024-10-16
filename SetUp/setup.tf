@@ -37,6 +37,16 @@ resource "aws_instance" "ansible_control_plane_server" {
     destination = "/home/ec2-user/Khurram-key.pem"         # Destination path on the remote instance
   }
 
+  provisioner "file" {
+    source      = "${path.module}/inventory.ini"
+    destination = "/home/ec2-user/inventory.ini"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/test_connectivity.yml"
+    destination = "/home/ec2-user/test_connectivity.yml"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "sudo yum update -y",                                           # Update the instance
@@ -53,7 +63,8 @@ resource "aws_instance" "ansible_control_plane_server" {
       "sudo hostnamectl set-hostname Ansible-Control-Plane-Server",                 # Set the hostname temporarily
       "echo 'Ansible-Control-Plane-Server' | sudo tee /etc/hostname",               # Set the hostname permanently
       "sudo sed -i 's/127.0.0.1.*/127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4 Ansible-Control-Plane-Server/' /etc/hosts",
-      "sudo sed -i 's/::1.*/::1         localhost localhost.localdomain localhost6 localhost6.localdomain6 Ansible-Control-Plane-Server/' /etc/hosts"
+      "sudo sed -i 's/::1.*/::1         localhost localhost.localdomain localhost6 localhost6.localdomain6 Ansible-Control-Plane-Server/' /etc/hosts",
+      "ansible-playbook -i /home/ec2-user/inventory.ini /home/ec2-user/test_connectivity.yml"  # Run the playbook
     ]
   }
 }
@@ -95,11 +106,84 @@ resource "aws_instance" "ansible_server" {
       "python3 -m pip install --user ansible-core",        # Install Ansible Core
       "python3 -m pip install --user ansible",             # Install Ansible
       "sudo pip3 install boto boto3 awscli",               # Install Boto, Boto3, and AWS CLI
+      "ssh-keygen -t rsa -N '' -f /home/ec2-user/.ssh/id_rsa",        # Generate SSH key pair
+      "cat /home/ec2-user/.ssh/id_rsa.pub >> /home/ec2-user/.ssh/authorized_keys", # Add public key to authorized_keys
+      "chmod 600 /home/ec2-user/.ssh/authorized_keys",                             # Change permissions of authorized_keys
+      "chmod 700 /home/ec2-user/.ssh",                                              # Change permissions of .ssh directory
       "sudo hostnamectl set-hostname AnsibleServer-${count.index + 1}",  # Set the hostname temporarily
       "echo 'AnsibleServer-${count.index + 1}' | sudo tee /etc/hostname", # Set the hostname permanently
       "sudo sed -i 's/127.0.0.1.*/127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4 AnsibleServer-${count.index + 1}/' /etc/hosts",
       "sudo sed -i 's/::1.*/::1         localhost localhost.localdomain localhost6 localhost6.localdomain6 AnsibleServer-${count.index + 1}/' /etc/hosts"
     ]
+  }
+}
+
+resource "local_file" "inventory_ini" {
+  content = <<EOF
+[control-plane]
+control-plane ansible_host=${aws_instance.ansible_control_plane_server[0].public_ip} ansible_user=ec2-user
+
+[worker-nodes]
+%{ for i, instance in aws_instance.ansible_server }
+worker-node${i + 1} ansible_host=${instance.public_ip} ansible_user=ec2-user
+%{ endfor }
+EOF
+
+  filename = "${path.module}/inventory.ini"
+}
+
+resource "local_file" "test_connectivity_yml" {
+  content = <<EOF
+---
+- name: Test connectivity between control plane and worker nodes
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Ping all servers
+      ping:
+EOF
+
+  filename = "${path.module}/test_connectivity.yml"
+}
+
+resource "null_resource" "upload_inventory" {
+  depends_on = [local_file.inventory_ini, local_file.test_connectivity_yml]
+
+  provisioner "file" {
+    source      = "${path.module}/inventory.ini"
+    destination = "/home/ec2-user/inventory.ini"
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = file("/home/ubuntu/Khurram-key.pem")
+      host        = aws_instance.ansible_control_plane_server[0].public_ip
+    }
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/test_connectivity.yml"
+    destination = "/home/ec2-user/test_connectivity.yml"
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = file("/home/ubuntu/Khurram-key.pem")
+      host        = aws_instance.ansible_control_plane_server[0].public_ip
+    }
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "ansible-playbook -i /home/ec2-user/inventory.ini /home/ec2-user/test_connectivity.yml"  # Run the playbook
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = file("/home/ubuntu/Khurram-key.pem")
+      host        = aws_instance.ansible_control_plane_server[0].public_ip
+    }
   }
 }
 
