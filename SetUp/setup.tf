@@ -40,15 +40,20 @@ resource "aws_instance" "ansible_control_plane_server" {
   provisioner "remote-exec" {
     inline = [
       "sudo yum update -y",                                           # Update the instance
-      "sudo amazon-linux-extras install ansible2 -y",                 # Install Ansible
       "sudo yum install -y git python3 python3-pip",                  # Install Git, Python3, and Pip3
+      "python3 -m pip install --user ansible-core",                   # Install Ansible Core
+      "python3 -m pip install --user ansible",                        # Install Ansible
       "sudo pip3 install boto boto3 awscli",                          # Install Boto, Boto3, and AWS CLI
       "sudo chown ec2-user:ec2-user /home/ec2-user/Khurram-key.pem",  # Change ownership of the PEM key
       "sudo chmod 400 /home/ec2-user/Khurram-key.pem",                # Change permissions of the PEM key
       "ssh-keygen -t rsa -N '' -f /home/ec2-user/.ssh/id_rsa",        # Generate SSH key pair
       "cat /home/ec2-user/.ssh/id_rsa.pub >> /home/ec2-user/.ssh/authorized_keys", # Add public key to authorized_keys
       "chmod 600 /home/ec2-user/.ssh/authorized_keys",                             # Change permissions of authorized_keys
-      "chmod 700 /home/ec2-user/.ssh"                                              # Change permissions of .ssh directory
+      "chmod 700 /home/ec2-user/.ssh",                                              # Change permissions of .ssh directory
+      "sudo hostnamectl set-hostname Ansible-Control-Plane-Server",                 # Set the hostname temporarily
+      "echo 'Ansible-Control-Plane-Server' | sudo tee /etc/hostname",               # Set the hostname permanently
+      "sudo sed -i 's/127.0.0.1.*/127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4 Ansible-Control-Plane-Server/' /etc/hosts",
+      "sudo sed -i 's/::1.*/::1         localhost localhost.localdomain localhost6 localhost6.localdomain6 Ansible-Control-Plane-Server/' /etc/hosts"
     ]
   }
 }
@@ -87,7 +92,13 @@ resource "aws_instance" "ansible_server" {
     inline = [
       "sudo yum update -y",                                # Update the instance
       "sudo yum install -y git python3 python3-pip",       # Install Git, Python3, and Pip3
-      "sudo pip3 install boto boto3 awscli"                # Install Boto, Boto3, and AWS CLI
+      "python3 -m pip install --user ansible-core",        # Install Ansible Core
+      "python3 -m pip install --user ansible",             # Install Ansible
+      "sudo pip3 install boto boto3 awscli",               # Install Boto, Boto3, and AWS CLI
+      "sudo hostnamectl set-hostname AnsibleServer-${count.index + 1}",  # Set the hostname temporarily
+      "echo 'AnsibleServer-${count.index + 1}' | sudo tee /etc/hostname", # Set the hostname permanently
+      "sudo sed -i 's/127.0.0.1.*/127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4 AnsibleServer-${count.index + 1}/' /etc/hosts",
+      "sudo sed -i 's/::1.*/::1         localhost localhost.localdomain localhost6 localhost6.localdomain6 AnsibleServer-${count.index + 1}/' /etc/hosts"
     ]
   }
 }
