@@ -1,0 +1,16 @@
+---
+- name: Ping worker nodes to verify connectivity
+  hosts: worker_node_1
+  tasks:
+    - name: Ping the worker nodes
+      ansible.builtin.ping:
+- name: Ping worker nodes to verify connectivity
+  hosts: worker_node_2
+  tasks:
+    - name: Ping the worker nodes
+      ansible.builtin.ping:
+- name: Ping worker nodes to verify connectivity
+  hosts: worker_node_3
+  tasks:
+    - name: Ping the worker nodes
+      ansible.builtin.ping:

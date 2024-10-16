@@ -1,0 +1,1 @@
+ansible-playbook -i /home/ec2-user/inventory.ini /home/ec2-user/playblooks/upgrades.yml --private-key /home/ec2-user/Khurram-key.pem --step

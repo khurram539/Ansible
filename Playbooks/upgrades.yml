@@ -1,0 +1,137 @@
+---
+- name: Update, upgrade, and install dependencies on servers
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update all packages to the latest version
+      yum:
+        name: '*'
+        state: latest
+      register: update_output
+      ignore_errors: yes
+
+    - name: Display update output
+      debug:
+        var: update_output
+
+    - name: Upgrade all packages
+      command: yum upgrade -y
+      register: upgrade_output
+      ignore_errors: yes
+
+    - name: Display upgrade output
+      debug:
+        var: upgrade_output
+
+    - name: Remove old packages and clean up
+      command: yum autoremove -y
+      register: autoremove_output
+      ignore_errors: yes
+
+    - name: Display autoremove output
+      debug:
+        var: autoremove_output
+
+    - name: Clean all cached files
+      command: yum clean all
+      register: clean_output
+      ignore_errors: yes
+
+    - name: Display clean output
+      debug:
+        var: clean_output
+
+    - name: Ensure pip is installed
+      yum:
+        name: python3-pip
+        state: present
+      register: pip_install_output
+      ignore_errors: yes
+
+    - name: Display pip install output
+      debug:
+        var: pip_install_output
+
+    - name: Upgrade pip to the latest version using pip
+      command: /usr/bin/python3.9 -m pip install -U pip --ignore-installed
+      register: pip_upgrade_output
+      ignore_errors: yes
+
+    - name: Display pip upgrade output
+      debug:
+        var: pip_upgrade_output
+
+    - name: Install requests using yum
+      yum:
+        name: python3-requests
+        state: latest
+      register: requests_install_output
+      ignore_errors: yes
+
+    - name: Display requests install output
+      debug:
+        var: requests_install_output
+
+    - name: Install essential Python packages (excluding requests)
+      pip:
+        name:
+          - numpy
+          - pandas
+          - boto3
+          - flask
+          - beautifulsoup4
+        state: latest
+      register: python_packages_output
+      ignore_errors: yes
+
+    - name: Display Python packages install output
+      debug:
+        var: python_packages_output
+
+    - name: Install development tools
+      yum:
+        name: "@Development tools"
+        state: present
+      register: dev_tools_output
+      ignore_errors: yes
+
+    - name: Display development tools install output
+      debug:
+        var: dev_tools_output
+
+    - name: Remove curl-minimal if installed
+      yum:
+        name: curl-minimal
+        state: absent
+      register: remove_curl_minimal_output
+      ignore_errors: yes
+
+    - name: Display curl-minimal removal output
+      debug:
+        var: remove_curl_minimal_output
+
+    - name: Install curl
+      yum:
+        name: curl
+        state: present
+      register: curl_install_output
+      ignore_errors: yes
+
+    - name: Display curl install output
+      debug:
+        var: curl_install_output
+
+    - name: Install additional dependencies
+      yum:
+        name:
+          - git
+          - vim
+          - htop
+        state: present
+      register: additional_deps_output
+      ignore_errors: yes
+
+    - name: Display additional dependencies install output
+      debug:
+        var: additional_deps_output

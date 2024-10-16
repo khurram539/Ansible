@@ -59,7 +59,7 @@ resource "aws_instance" "ansible_control_plane_server" {
 }
 
 resource "aws_instance" "ansible_server" {
-  count                       = 3                          # Create three instances
+  count                       = 2                          # Create three instances
   ami                         = "ami-0ae8f15ae66fe8cda"    # Amazon Linux 2 AMI ID for us-east-1
   instance_type               = "t2.micro"                 # Preferred instance type
   key_name                    = "Khurram-key"              # Add your key pair name
