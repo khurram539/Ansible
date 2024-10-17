@@ -1,4 +1,3 @@
----
 - name: Regular updates on all nodes
   hosts: all
   become: yes
@@ -45,4 +44,62 @@
     - name: Display clean output
       debug:
         var: clean_output
+
+    # Remove all Docker packages
+    - name: Remove all Docker packages
+      yum:
+        name: docker*
+        state: absent
+      register: remove_docker_output
+      ignore_errors: yes
+
+    - name: Display Docker removal output
+      debug:
+        var: remove_docker_output
+
+    # Add Docker repository
+    - name: Add Docker repository
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - x86_64
+        baseurl: https://download.docker.com/linux/centos/7/x86_64/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+
+    # List yum repositories
+    - name: List yum repositories
+      command: yum repolist
+      register: repolist_output
+      ignore_errors: yes
+
+    - name: Display yum repositories
+      debug:
+        var: repolist_output
+
+    # Install Docker manually
+    - name: Install Docker manually
+      command: yum install -y docker-ce
+      register: manual_docker_install_output
+      ignore_errors: yes
+
+    - name: Display manual Docker install output
+      debug:
+        var: manual_docker_install_output
+
+    # Verify Docker installation
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version_output
+      ignore_errors: yes
+
+    - name: Display Docker version output
+      debug:
+        var: docker_version_output
+
+    # Start and enable Docker service
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
 
