@@ -1,22 +1,10 @@
 ---
-- name: Update, upgrade, and install dependencies on servers
+- name: Regular updates on all nodes
   hosts: all
   become: yes
 
   tasks:
-    # Ensure Python 3 is installed
-    - name: Ensure Python 3 is installed
-      yum:
-        name: python3
-        state: present
-      register: python3_install_output
-      ignore_errors: yes
-
-    - name: Display Python 3 install output
-      debug:
-        var: python3_install_output
-
-    # System Update and Upgrade
+    # Update all packages to the latest version
     - name: Update all packages to the latest version
       yum:
         name: '*'
@@ -28,6 +16,7 @@
       debug:
         var: update_output
 
+    # Upgrade all packages
     - name: Upgrade all packages
       command: yum upgrade -y
       register: upgrade_output
@@ -37,6 +26,7 @@
       debug:
         var: upgrade_output
 
+    # Remove old packages and clean up
     - name: Remove old packages and clean up
       command: yum autoremove -y
       register: autoremove_output
@@ -46,6 +36,7 @@
       debug:
         var: autoremove_output
 
+    # Clean all cached files
     - name: Clean all cached files
       command: yum clean all
       register: clean_output
@@ -55,224 +46,3 @@
       debug:
         var: clean_output
 
-    # Python and Pip Installation
-    - name: Ensure pip is installed
-      yum:
-        name: python3-pip
-        state: present
-      register: pip_install_output
-      ignore_errors: yes
-
-    - name: Display pip install output
-      debug:
-        var: pip_install_output
-
-    - name: Upgrade pip to the latest version using pip
-      command: /usr/bin/python3 -m pip install -U pip --ignore-installed
-      register: pip_upgrade_output
-      ignore_errors: yes
-
-    - name: Display pip upgrade output
-      debug:
-        var: pip_upgrade_output
-
-    - name: Install requests using yum
-      yum:
-        name: python3-requests
-        state: latest
-      register: requests_install_output
-      ignore_errors: yes
-
-    - name: Display requests install output
-      debug:
-        var: requests_install_output
-
-    - name: Install essential Python packages (excluding requests)
-      pip:
-        name:
-          - numpy
-          - pandas
-          - boto3
-          - flask
-          - beautifulsoup4
-        state: latest
-      register: python_packages_output
-      ignore_errors: yes
-
-    - name: Display Python packages install output
-      debug:
-        var: python_packages_output
-
-    # Development Tools and Utilities
-    - name: Install development tools
-      yum:
-        name: "@Development tools"
-        state: present
-      register: dev_tools_output
-      ignore_errors: yes
-
-    - name: Display development tools install output
-      debug:
-        var: dev_tools_output
-
-    - name: Remove curl-minimal if installed
-      yum:
-        name: curl-minimal
-        state: absent
-      register: remove_curl_minimal_output
-      ignore_errors: yes
-
-    - name: Display curl-minimal removal output
-      debug:
-        var: remove_curl_minimal_output
-
-    - name: Install curl
-      yum:
-        name: curl
-        state: present
-      register: curl_install_output
-      ignore_errors: yes
-
-    - name: Display curl install output
-      debug:
-        var: curl_install_output
-
-    - name: Install additional dependencies
-      yum:
-        name:
-          - git
-          - vim
-          - htop
-        state: present
-      register: additional_deps_output
-      ignore_errors: yes
-
-    - name: Display additional dependencies install output
-      debug:
-        var: additional_deps_output
-
-    # Docker Installation
-    - name: Install Docker
-      yum:
-        name: docker
-        state: present
-      register: docker_install_output
-      failed_when: docker_install_output.failed
-
-    - name: Display Docker install output
-      debug:
-        var: docker_install_output
-
-    - name: Start and enable Docker service
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
-      register: docker_service_output
-      failed_when: docker_service_output.failed
-
-    - name: Display Docker service output
-      debug:
-        var: docker_service_output
-
-    # Kubernetes Installation
-    - name: Add Kubernetes repository
-      yum_repository:
-        name: kubernetes
-        description: Kubernetes
-        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
-        gpgcheck: 1
-        repo_gpgcheck: 1
-        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-        state: present
-      register: kubernetes_repo_output
-      failed_when: kubernetes_repo_output.failed
-
-    - name: Display Kubernetes repository output
-      debug:
-        var: kubernetes_repo_output
-
-    - name: Install Kubernetes components
-      yum:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-        state: present
-      register: kubernetes_install_output
-      failed_when: kubernetes_install_output.failed
-
-    - name: Display Kubernetes install output
-      debug:
-        var: kubernetes_install_output
-
-    - name: Start and enable kubelet service
-      systemd:
-        name: kubelet
-        state: started
-        enabled: yes
-      register: kubelet_service_output
-      failed_when: kubelet_service_output.failed
-
-    - name: Display kubelet service output
-      debug:
-        var: kubelet_service_output
-
-    # Terraform Installation
-    - name: Download Terraform
-      get_url:
-        url: https://releases.hashicorp.com/terraform/1.0.11/terraform_1.0.11_linux_amd64.zip
-        dest: /tmp/terraform.zip
-      register: terraform_download_output
-      failed_when: terraform_download_output.failed
-
-    - name: Display Terraform download output
-      debug:
-        var: terraform_download_output
-
-    - name: Unzip Terraform
-      unarchive:
-        src: /tmp/terraform.zip
-        dest: /usr/local/bin/
-        remote_src: yes
-      register: terraform_unzip_output
-      failed_when: terraform_unzip_output.failed
-
-    - name: Display Terraform unzip output
-      debug:
-        var: terraform_unzip_output
-
-    - name: Ensure Terraform is executable
-      file:
-        path: /usr/local/bin/terraform
-        mode: '0755'
-      register: terraform_chmod_output
-      failed_when: terraform_chmod_output.failed
-
-    - name: Display Terraform chmod output
-      debug:
-        var: terraform_chmod_output
-
-    # AWS EKS CLI Installation
-    - name: Download AWS EKS CLI
-      get_url:
-        url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/eksctl
-        dest: /usr/local/bin/eksctl
-        mode: '0755'
-      register: eksctl_download_output
-      failed_when: eksctl_download_output.failed
-
-    - name: Display AWS EKS CLI download output
-      debug:
-        var: eksctl_download_output
-
-    - name: Ensure AWS EKS CLI is executable
-      file:
-        path: /usr/local/bin/eksctl
-        mode: '0755'
-      register: eksctl_chmod_output
-      failed_when: eksctl_chmod_output.failed
-
-    - name: Display AWS EKS CLI chmod output
-      debug:
-        var: eksctl_chmod_output
