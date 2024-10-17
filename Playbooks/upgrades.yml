@@ -136,11 +136,10 @@
       debug:
         var: additional_deps_output
 
+# Kubernetes dependencies
 
-# Install kubectl and eksctl
-
-- name: Install kubectl and eksctl on all nodes
-  hosts: all
+- name: Install and update Kubernetes dependencies on all nodes
+  hosts: all-nodes
   become: yes
   tasks:
     - name: Install dependencies
@@ -149,26 +148,55 @@
           - curl
           - tar
           - gzip
+          - yum-utils
         state: present
+
+    - name: Add Kubernetes repository
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        enabled: yes
+
+    - name: Install kubeadm, kubelet, and kubectl
+      yum:
+        name:
+          - kubeadm
+          - kubelet
+          - kubectl
+        state: latest
+
+    - name: Enable and start kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+        state: started
 
     - name: Download kubectl
       get_url:
         url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl
         dest: /usr/local/bin/kubectl
         mode: '0755'
+      register: kubectl_download
 
     - name: Verify kubectl installation
       command: kubectl version --client
       register: kubectl_version
+      when: kubectl_download.changed
 
     - name: Display kubectl version
       debug:
         var: kubectl_version.stdout
+      when: kubectl_download.changed
 
     - name: Download eksctl
       get_url:
         url: https://github.com/weaveworks/eksctl/releases/download/v0.78.0/eksctl_Linux_amd64.tar.gz
         dest: /tmp/eksctl.tar.gz
+      register: eksctl_download
 
     - name: Remove existing eksctl binary if it exists
       file:
@@ -180,29 +208,31 @@
         src: /tmp/eksctl.tar.gz
         dest: /usr/local/bin/
         remote_src: yes
+      when: eksctl_download.changed
 
     - name: Verify eksctl installation
       command: eksctl version
       register: eksctl_version
+      when: eksctl_download.changed
 
     - name: Display eksctl version
       debug:
         var: eksctl_version.stdout
+      when: eksctl_download.changed
 
-# Install Docker
-- name: Install Docker on all nodes
+
+
+
+- name: Install and update Docker, kubectl, and Helm on all nodes
   hosts: all
-  become: yes  # Run tasks with sudo
-
+  become: yes
   tasks:
-    - name: Update all packages
-      yum:
-        name: "*"
-        state: latest
-
-    - name: Install required dependencies
+    - name: Install dependencies
       yum:
         name:
+          - curl
+          - tar
+          - gzip
           - yum-utils
           - device-mapper-persistent-data
           - lvm2
@@ -211,19 +241,47 @@
     - name: Add Docker repository
       yum_repository:
         name: docker
-        description: Docker Repository
+        description: Docker CE Stable - x86_64
         baseurl: https://download.docker.com/linux/centos/7/x86_64/stable
         gpgcheck: yes
         gpgkey: https://download.docker.com/linux/centos/gpg
+        enabled: yes
 
     - name: Install Docker
       yum:
         name: docker-ce
-        state: present
+        state: latest
 
-    - name: Start Docker service
-      service:
+    - name: Enable and start Docker
+      systemd:
         name: docker
-        state: started
         enabled: yes
+        state: started
+
+    - name: Download Helm
+      get_url:
+        url: https://get.helm.sh/helm-v3.7.2-linux-amd64.tar.gz
+        dest: /tmp/helm.tar.gz
+      register: helm_download
+
+    - name: Extract Helm
+      unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp/
+        remote_src: yes
+      when: helm_download.changed
+
+    - name: Move Helm binary
+      command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+      when: helm_download.changed
+
+    - name: Verify Helm installation
+      command: helm version
+      register: helm_version
+      when: helm_download.changed
+
+    - name: Display Helm version
+      debug:
+        var: helm_version.stdout
+      when: helm_download.changed
 
