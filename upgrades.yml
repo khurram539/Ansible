@@ -1,0 +1,267 @@
+---
+- name: Update, upgrade, and install dependencies on servers
+  hosts: all
+  become: yes
+
+  tasks:
+    # System Update and Upgrade
+    - name: Update all packages to the latest version
+      yum:
+        name: '*'
+        state: latest
+      register: update_output
+      ignore_errors: yes
+
+    - name: Display update output
+      debug:
+        var: update_output
+
+    - name: Upgrade all packages
+      command: yum upgrade -y
+      register: upgrade_output
+      ignore_errors: yes
+
+    - name: Display upgrade output
+      debug:
+        var: upgrade_output
+
+    - name: Remove old packages and clean up
+      command: yum autoremove -y
+      register: autoremove_output
+      ignore_errors: yes
+
+    - name: Display autoremove output
+      debug:
+        var: autoremove_output
+
+    - name: Clean all cached files
+      command: yum clean all
+      register: clean_output
+      ignore_errors: yes
+
+    - name: Display clean output
+      debug:
+        var: clean_output
+
+    # Python and Pip Installation
+    - name: Ensure pip is installed
+      yum:
+        name: python3-pip
+        state: present
+      register: pip_install_output
+      ignore_errors: yes
+
+    - name: Display pip install output
+      debug:
+        var: pip_install_output
+
+    - name: Upgrade pip to the latest version using pip
+      command: /usr/bin/python3 -m pip install -U pip --ignore-installed
+      register: pip_upgrade_output
+      ignore_errors: yes
+
+    - name: Display pip upgrade output
+      debug:
+        var: pip_upgrade_output
+
+    - name: Install requests using yum
+      yum:
+        name: python3-requests
+        state: latest
+      register: requests_install_output
+      ignore_errors: yes
+
+    - name: Display requests install output
+      debug:
+        var: requests_install_output
+
+    - name: Install essential Python packages (excluding requests)
+      pip:
+        name:
+          - numpy
+          - pandas
+          - boto3
+          - flask
+          - beautifulsoup4
+        state: latest
+      register: python_packages_output
+      ignore_errors: yes
+
+    - name: Display Python packages install output
+      debug:
+        var: python_packages_output
+
+    # Development Tools and Utilities
+    - name: Install development tools
+      yum:
+        name: "@Development tools"
+        state: present
+      register: dev_tools_output
+      ignore_errors: yes
+
+    - name: Display development tools install output
+      debug:
+        var: dev_tools_output
+
+    - name: Remove curl-minimal if installed
+      yum:
+        name: curl-minimal
+        state: absent
+      register: remove_curl_minimal_output
+      ignore_errors: yes
+
+    - name: Display curl-minimal removal output
+      debug:
+        var: remove_curl_minimal_output
+
+    - name: Install curl
+      yum:
+        name: curl
+        state: present
+      register: curl_install_output
+      ignore_errors: yes
+
+    - name: Display curl install output
+      debug:
+        var: curl_install_output
+
+    - name: Install additional dependencies
+      yum:
+        name:
+          - git
+          - vim
+          - htop
+        state: present
+      register: additional_deps_output
+      ignore_errors: yes
+
+    - name: Display additional dependencies install output
+      debug:
+        var: additional_deps_output
+
+- name: Install and update Docker, kubectl, and Helm on all nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install dependencies
+      yum:
+        name:
+          - curl
+          - tar
+          - gzip
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+
+    - name: Add Docker repository
+      command: >
+        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      register: docker_repo_add
+
+    - name: Display Docker repository add output
+      debug:
+        var: docker_repo_add
+
+    - name: Install Docker
+      yum:
+        name: docker-ce
+        state: present
+
+    - name: Enable and start Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Download kubectl
+      get_url:
+        url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+      register: kubectl_download
+
+    - name: Verify kubectl installation
+      command: kubectl version --client
+      register: kubectl_version
+
+    - name: Display kubectl version
+      debug:
+        var: kubectl_version.stdout
+
+    - name: Download Helm
+      get_url:
+        url: https://get.helm.sh/helm-v3.7.2-linux-amd64.tar.gz
+        dest: /tmp/helm.tar.gz
+      register: helm_download
+
+    - name: Extract Helm
+      unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Move Helm binary
+      command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+
+    - name: Verify Helm installation
+      command: helm version
+      register: helm_version
+
+    - name: Display Helm version
+      debug:
+        var: helm_version.stdout
+
+- name: Install and update Kubernetes dependencies on all nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install dependencies
+      yum:
+        name:
+          - curl
+          - tar
+          - gzip
+          - yum-utils
+        state: present
+
+    - name: Add Kubernetes repository
+      shell: |
+        cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=1
+        repo_gpgcheck=1
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        EOF
+
+    - name: Verify Kubernetes repository
+      command: yum repolist all | grep kubernetes
+      register: kubernetes_repo
+
+    - name: Display Kubernetes repository
+      debug:
+        var: kubernetes_repo.stdout
+
+    - name: Update repository cache
+      command: yum makecache
+
+    - name: Clean yum cache
+      command: yum clean all
+
+    - name: Install kubeadm, kubelet, and kubectl
+      yum:
+        name:
+          - kubeadm
+          - kubelet
+          - kubectl
+        state: latest
+
+    - name: Enable and start kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
