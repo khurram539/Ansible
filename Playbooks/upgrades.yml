@@ -108,26 +108,29 @@
       yum_repository:
         name: kubernetes
         description: Kubernetes repository
-        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        baseurl: https://pkgs.k8s.io/core:/stable:/v1.31/rpm/
         gpgcheck: yes
-        repo_gpgcheck: yes
-        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.31/rpm/repodata/repomd.xml.key
 
-    # Install Kubernetes components
-    - name: Install Kubernetes components
-      yum:
-        name: "{{ item }}"
-        state: latest
-      loop:
-        - kubelet
-        - kubeadm
-        - kubectl
-      register: kubernetes_install_output
+    # List yum repositories to verify Kubernetes repo
+    - name: List yum repositories to verify Kubernetes repo
+      command: yum repolist
+      register: kubernetes_repolist_output
       ignore_errors: yes
 
-    - name: Display Kubernetes install output
+    - name: Display Kubernetes repo list
       debug:
-        var: kubernetes_install_output
+        var: kubernetes_repolist_output
+
+    # Install Kubernetes components manually
+    - name: Install Kubernetes components manually
+      command: yum install -y kubelet kubeadm kubectl
+      register: manual_kubernetes_install_output
+      ignore_errors: yes
+
+    - name: Display manual Kubernetes install output
+      debug:
+        var: manual_kubernetes_install_output
 
     # Check if kubelet is installed
     - name: Check if kubelet is installed
