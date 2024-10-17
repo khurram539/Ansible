@@ -153,27 +153,15 @@
 
     # Docker Installation
     - name: Install Docker
-  yum:
-    name: docker
-    state: present
-  register: docker_install_output
-  failed_when: docker_install_output.failed
+      yum:
+        name: docker
+        state: present
+      register: docker_install_output
+      failed_when: docker_install_output.failed
 
-- name: Display Docker install output
-  debug:
-    var: docker_install_output
-
-- name: Start and enable Docker service
-  systemd:
-    name: docker
-    state: started
-    enabled: yes
-  register: docker_service_output
-  failed_when: docker_service_output.failed
-
-- name: Display Docker service output
-  debug:
-    var: docker_service_output
+    - name: Display Docker install output
+      debug:
+        var: docker_install_output
 
     - name: Start and enable Docker service
       systemd:
@@ -181,106 +169,110 @@
         state: started
         enabled: yes
       register: docker_service_output
-      ignore_errors: yes    
+      failed_when: docker_service_output.failed
+
+    - name: Display Docker service output
+      debug:
+        var: docker_service_output
 
     # Kubernetes Installation
     - name: Add Kubernetes repository
-  yum_repository:
-    name: kubernetes
-    description: Kubernetes
-    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
-    gpgcheck: 1
-    repo_gpgcheck: 1
-    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-    state: present
-  register: kubernetes_repo_output
-  failed_when: kubernetes_repo_output.failed
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgcheck: 1
+        repo_gpgcheck: 1
+        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        state: present
+      register: kubernetes_repo_output
+      failed_when: kubernetes_repo_output.failed
 
-- name: Display Kubernetes repository output
-  debug:
-    var: kubernetes_repo_output
+    - name: Display Kubernetes repository output
+      debug:
+        var: kubernetes_repo_output
 
-- name: Install Kubernetes components
-  yum:
-    name:
-      - kubelet
-      - kubeadm
-      - kubectl
-    state: present
-  register: kubernetes_install_output
-  failed_when: kubernetes_install_output.failed
+    - name: Install Kubernetes components
+      yum:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+      register: kubernetes_install_output
+      failed_when: kubernetes_install_output.failed
 
-- name: Display Kubernetes install output
-  debug:
-    var: kubernetes_install_output
+    - name: Display Kubernetes install output
+      debug:
+        var: kubernetes_install_output
 
-- name: Start and enable kubelet service
-  systemd:
-    name: kubelet
-    state: started
-    enabled: yes
-  register: kubelet_service_output
-  failed_when: kubelet_service_output.failed
+    - name: Start and enable kubelet service
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+      register: kubelet_service_output
+      failed_when: kubelet_service_output.failed
 
-- name: Display kubelet service output
-  debug:
-    var: kubelet_service_output
+    - name: Display kubelet service output
+      debug:
+        var: kubelet_service_output
 
     # Terraform Installation
     - name: Download Terraform
-  get_url:
-    url: https://releases.hashicorp.com/terraform/1.0.11/terraform_1.0.11_linux_amd64.zip
-    dest: /tmp/terraform.zip
-  register: terraform_download_output
-  failed_when: terraform_download_output.failed
+      get_url:
+        url: https://releases.hashicorp.com/terraform/1.0.11/terraform_1.0.11_linux_amd64.zip
+        dest: /tmp/terraform.zip
+      register: terraform_download_output
+      failed_when: terraform_download_output.failed
 
-- name: Display Terraform download output
-  debug:
-    var: terraform_download_output
+    - name: Display Terraform download output
+      debug:
+        var: terraform_download_output
 
-- name: Unzip Terraform
-  unarchive:
-    src: /tmp/terraform.zip
-    dest: /usr/local/bin/
-    remote_src: yes
-  register: terraform_unzip_output
-  failed_when: terraform_unzip_output.failed
+    - name: Unzip Terraform
+      unarchive:
+        src: /tmp/terraform.zip
+        dest: /usr/local/bin/
+        remote_src: yes
+      register: terraform_unzip_output
+      failed_when: terraform_unzip_output.failed
 
-- name: Display Terraform unzip output
-  debug:
-    var: terraform_unzip_output
+    - name: Display Terraform unzip output
+      debug:
+        var: terraform_unzip_output
 
-- name: Ensure Terraform is executable
-  file:
-    path: /usr/local/bin/terraform
-    mode: '0755'
-  register: terraform_chmod_output
-  failed_when: terraform_chmod_output.failed
+    - name: Ensure Terraform is executable
+      file:
+        path: /usr/local/bin/terraform
+        mode: '0755'
+      register: terraform_chmod_output
+      failed_when: terraform_chmod_output.failed
 
-- name: Display Terraform chmod output
-  debug:
-    var: terraform_chmod_output
+    - name: Display Terraform chmod output
+      debug:
+        var: terraform_chmod_output
 
     # AWS EKS CLI Installation
     - name: Download AWS EKS CLI
-  get_url:
-    url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/eksctl
-    dest: /usr/local/bin/eksctl
-    mode: '0755'
-  register: eksctl_download_output
-  failed_when: eksctl_download_output.failed
+      get_url:
+        url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/eksctl
+        dest: /usr/local/bin/eksctl
+        mode: '0755'
+      register: eksctl_download_output
+      failed_when: eksctl_download_output.failed
 
-- name: Display AWS EKS CLI download output
-  debug:
-    var: eksctl_download_output
+    - name: Display AWS EKS CLI download output
+      debug:
+        var: eksctl_download_output
 
-- name: Ensure AWS EKS CLI is executable
-  file:
-    path: /usr/local/bin/eksctl
-    mode: '0755'
-  register: eksctl_chmod_output
-  failed_when: eksctl_chmod_output.failed
+    - name: Ensure AWS EKS CLI is executable
+      file:
+        path: /usr/local/bin/eksctl
+        mode: '0755'
+      register: eksctl_chmod_output
+      failed_when: eksctl_chmod_output.failed
 
-- name: Display AWS EKS CLI chmod output
-  debug:
-    var: eksctl_chmod_output
+    - name: Display AWS EKS CLI chmod output
+      debug:
+        var: eksctl_chmod_output
