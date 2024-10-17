@@ -135,3 +135,95 @@
     - name: Display additional dependencies install output
       debug:
         var: additional_deps_output
+
+
+# Install kubectl and eksctl
+
+- name: Install kubectl and eksctl on all nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install dependencies
+      yum:
+        name:
+          - curl
+          - tar
+          - gzip
+        state: present
+
+    - name: Download kubectl
+      get_url:
+        url: https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    - name: Verify kubectl installation
+      command: kubectl version --client
+      register: kubectl_version
+
+    - name: Display kubectl version
+      debug:
+        var: kubectl_version.stdout
+
+    - name: Download eksctl
+      get_url:
+        url: https://github.com/weaveworks/eksctl/releases/download/v0.78.0/eksctl_Linux_amd64.tar.gz
+        dest: /tmp/eksctl.tar.gz
+
+    - name: Remove existing eksctl binary if it exists
+      file:
+        path: /usr/local/bin/eksctl
+        state: absent
+
+    - name: Extract eksctl
+      unarchive:
+        src: /tmp/eksctl.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Verify eksctl installation
+      command: eksctl version
+      register: eksctl_version
+
+    - name: Display eksctl version
+      debug:
+        var: eksctl_version.stdout
+
+# Install Docker
+- name: Install Docker on all nodes
+  hosts: all
+  become: yes  # Run tasks with sudo
+
+  tasks:
+    - name: Update all packages
+      yum:
+        name: "*"
+        state: latest
+
+    - name: Install required dependencies
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+
+    - name: Add Docker repository
+      yum_repository:
+        name: docker
+        description: Docker Repository
+        baseurl: https://download.docker.com/linux/centos/7/x86_64/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+
+    - name: Install Docker
+      yum:
+        name: docker-ce
+        state: present
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
