@@ -103,3 +103,46 @@
         state: started
         enabled: yes
 
+    # Add Kubernetes repository
+    - name: Add Kubernetes repository
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes repository
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    # Install Kubernetes components
+    - name: Install Kubernetes components
+      yum:
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+      register: kubernetes_install_output
+      ignore_errors: yes
+
+    - name: Display Kubernetes install output
+      debug:
+        var: kubernetes_install_output
+
+    # Check if kubelet is installed
+    - name: Check if kubelet is installed
+      command: rpm -q kubelet
+      register: kubelet_check_output
+      ignore_errors: yes
+
+    - name: Display kubelet check output
+      debug:
+        var: kubelet_check_output
+
+    # Enable and start kubelet
+    - name: Enable and start kubelet
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+
