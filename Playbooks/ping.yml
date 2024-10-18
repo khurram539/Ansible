@@ -1,6 +1,6 @@
 ---
 - name: Ping worker nodes to verify connectivity
-  hosts: all nodes
+  hosts: all
   tasks:
     - name: Ping the worker nodes
       ansible.builtin.ping:

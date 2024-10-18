@@ -1,0 +1,21 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+  - name: Stop Apache2 (httpd) service
+    ansible.builtin.service:
+      name: httpd
+      state: stopped
+
+  - name: Disable Apache2 (httpd) service
+    ansible.builtin.service:
+      name: httpd
+      enabled: no
+
+  - name: Remove Apache2 (httpd) package
+    ansible.builtin.yum:
+      name: httpd
+      state: absent
+
+
