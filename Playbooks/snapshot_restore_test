@@ -1,0 +1,147 @@
+---
+- name: Create and attach a new volume from the most recent snapshot
+  hosts: all
+  gather_facts: no
+  vars:
+    instance_id: i-0c1b1b1b1b1b1b1b1
+    region: us-east-1
+    availability_zone: us-east-1a
+
+  tasks:
+    - name: Get the most recent snapshot with specified tags
+      amazon.aws.ec2_snapshot_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "DevBox"
+      register: snapshot_info
+
+    - name: Debug snapshot info
+      debug:
+        var: snapshot_info
+
+    - name: sort snapshot by start time to get the most recent one
+      set_fact:
+        snapshot_id: "{{ snapshot_info.snapshots | sort(attribute='start_time', reverse=True) | first }}"
+
+    - name: Debug the most recent snapshot
+      debug:
+        var: most_recent_snapshot
+
+    - name: calculate the new volume size
+      set_fact:
+        new_volume_size: "{{ most_recent_snapshot.volume_size  + 20 }}"
+
+    - name: Get the current month name
+      set_fact:
+        month: "{{ lookup('pipe', 'date +%B') }}"
+    
+    - name: Create a new volume from the most recent snapshot
+      amazon.aws.ec2_vol:
+        region: "{{ region }}"
+        snapshot: "{{ most_recent_snapshot.snapshot_id }}"
+        availability_zone: "{{ availability_zone }}"
+        volume_size: "{{ new_volume_size }}"
+        volume_type: "{{ most_recent_snapshot.volume_type | default('gp2') }}"
+        iops: "{{ most_recent_snapshot.iops | default(100) }}"
+        tags:
+          Name: "{{ current_month }} Test"
+      register: new_volume
+
+    - name: Debug volume strategy
+      debug:
+        msg: "Volume state: {{ volume_info.volumes[0].state }}"
+      when: volume_info.volumes is define and volume_info.volumes | length > 0
+
+    - name: Get instance details
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        instance_ids: "{{ instance_id }}"
+      register: instance_info
+
+    - name: list current volumes attach to the instance
+      set_fact:
+        attached_volumes: "{{ instance_info.instance[0].block_device_mappings | default([]) | map(attribute='device_name') | list | default([]) }}"
+
+    - name: Attach the new volume to the instance
+      amazon.aws.ec2_vol:
+        region: "{{ region }}"
+        id: "{{ new_volume.volume_id }}"
+        instance: "{{ instance_id }}"
+        device_name: /dev/sdh
+      register: attach_result
+
+    - name: Print the attach_result
+      debug:
+        msg: >
+          Create the attach volume {{ new_volume.volume_id}} (size: {{ new_size }} GB)
+          to instance {{ instance_id }} with name {{ current_month }} Test.
+
+    - name: Debug the attach_result
+      debug:
+      var: attach_result
+    
+    - name: Debug the attach_result
+      debug:
+      var: attach_result
+
+    - name: verify the volume state is 'in-use'
+      amazon.aws.ec2_vol_info:
+        region: "{{ region }}"
+        filters:
+          volume-id: "{{ new_volume.volume_id }}"
+      register: volume_state_info
+
+    - name: Debug volume state info
+      debug:
+        var: volume_state_info
+    
+    - name: Create mount directory 
+      file:
+        path: /mnt
+        state: directory
+        mode: 0755
+      become: yes
+
+    - name: wait for instance to recognize the new volume
+      command: sleep 30
+
+    - name: Mount LV_opt to /mnt
+      shell: "vgimportclone -n LV_System /dev/mvme1n1p2 && sleep 5 && vgchange -ay LV_System1 && sleep 5 && mount -o nouuid /dev/LV_System1/LV_opt /mnt"
+      become: yes
+      register: out
+    - debug: var=out
+
+    - name: Debug most_recent_snapshot
+      debug:
+        var: most_recent_snapshot
+
+    - name: Show contents of mounted volume
+      command: ls -l /mnt
+      register: out
+      become: yes
+    - debug: var=out
+
+    - name: Debug volume state info
+      debug:
+        var: volume_state_info
+
+    - name: unmout the volume
+      shell: |
+        umount /mnt && sleep 10 
+        vgchange -an LV_System1 -f && sleep 5
+        pvremove /dev/mvme1n1p2
+      become: yes
+
+    - name: Detach volume
+      amazon.aws.ec2_vol:
+        id: "{{ new_volume.volume_id }}"
+        instance: None
+        region: "{{ region }}"
+        device_name: /dev/sdh
+        state: absent
+      register: detach_result
+      ignore_errors: yes
+    
+    
+       
+     
