@@ -1,0 +1,220 @@
+---
+- name: Rolling OS update for Kubernetes worker nodes
+  hosts: worker_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+
+  vars:
+    reboot_if_needed: true
+    run_distro_sync: true
+    drain_node_before_maintenance: true
+    kubectl_binary: kubectl
+    drain_timeout: 10m
+    kubectl_wait_timeout: 300s
+
+  pre_tasks:
+    - name: Validate worker node count in inventory
+      ansible.builtin.assert:
+        that:
+          - groups['worker_nodes'] | length >= 3
+        fail_msg: "Expected at least 3 hosts in [worker_nodes]. Update inventory.ini before running this playbook."
+        success_msg: "Inventory check passed for rolling worker updates."
+      run_once: true
+
+    - name: Show node currently being updated
+      ansible.builtin.debug:
+        msg: "Updating {{ inventory_hostname }} (one node at a time)"
+
+    - name: Derive Kubernetes node name from worker private IP
+      ansible.builtin.set_fact:
+        kube_node_name: "ip-{{ ansible_host | replace('.', '-') }}.ec2.internal"
+
+    - name: Cordon node before maintenance
+      ansible.builtin.command: "{{ kubectl_binary }} cordon {{ kube_node_name }}"
+      register: cordon_result
+      changed_when: "'already cordoned' not in cordon_result.stdout"
+      delegate_to: localhost
+      become: false
+      when: drain_node_before_maintenance | bool
+
+    - name: Drain node before maintenance
+      ansible.builtin.command: >-
+        {{ kubectl_binary }} drain {{ kube_node_name }}
+        --ignore-daemonsets
+        --delete-emptydir-data
+        --force
+        --grace-period=30
+        --timeout={{ drain_timeout }}
+      register: drain_result
+      changed_when: true
+      delegate_to: localhost
+      become: false
+      when: drain_node_before_maintenance | bool
+
+    - name: Check kubelet service state before maintenance
+      ansible.builtin.systemd:
+        name: kubelet
+      register: kubelet_service
+
+    - name: Check container runtime service state before maintenance
+      ansible.builtin.systemd:
+        name: containerd
+      register: containerd_service
+
+    - name: Capture root filesystem usage before maintenance
+      ansible.builtin.command: df -h /
+      register: rootfs_before
+      changed_when: false
+
+    - name: Print pre-maintenance summary
+      ansible.builtin.debug:
+        msg:
+          - "kubelet={{ kubelet_service.status.ActiveState | default('unknown') }}"
+          - "containerd={{ containerd_service.status.ActiveState | default('unknown') }}"
+          - "rootfs_before={{ rootfs_before.stdout_lines | default([]) }}"
+
+  tasks:
+    - name: Refresh DNF package metadata cache
+      ansible.builtin.command: dnf -y makecache
+      register: dnf_makecache_result
+      changed_when: false
+
+    - name: Check available package updates before maintenance
+      ansible.builtin.command: dnf -q check-update
+      register: dnf_check_update
+      changed_when: dnf_check_update.rc == 100
+      failed_when: dnf_check_update.rc not in [0, 100]
+
+    - name: Show available package updates before maintenance
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            (
+              ['Updates available before maintenance:']
+              + (dnf_check_update.stdout_lines | default([]))
+            )
+            if dnf_check_update.rc == 100
+            else ['No package updates pending before maintenance.']
+          }}
+
+    - name: Upgrade all installed packages to latest available version
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: dnf_update_result
+
+    - name: Synchronize installed package versions with enabled repos (distro-sync)
+      ansible.builtin.command: dnf -y distro-sync
+      register: dnf_distro_sync_result
+      changed_when: >-
+        ('Nothing to do.' not in dnf_distro_sync_result.stdout)
+        and ('Nothing to do.' not in dnf_distro_sync_result.stderr)
+      when: run_distro_sync | bool
+
+    - name: Remove obsolete dependencies
+      ansible.builtin.dnf:
+        autoremove: true
+      register: dnf_autoremove_result
+
+    - name: Clean DNF metadata cache
+      ansible.builtin.command: dnf -y clean all
+      changed_when: false
+
+    - name: Capture last DNF transaction details when packages changed
+      ansible.builtin.command: dnf -q history info last
+      register: dnf_last_transaction
+      changed_when: false
+      when: dnf_update_result is changed or dnf_autoremove_result is changed or (run_distro_sync | bool and dnf_distro_sync_result is changed)
+
+    - name: Show package transaction summary
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            (
+              ['DNF transaction details:']
+              + (dnf_last_transaction.stdout_lines | default([]))
+            )
+            if (dnf_update_result is changed or dnf_autoremove_result is changed or (run_distro_sync | bool and dnf_distro_sync_result is changed))
+            else ['No package changes were applied during this maintenance run.']
+          }}
+
+    - name: Ensure kubelet is enabled and running
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: true
+        state: started
+
+    - name: Ensure containerd is enabled and running
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: true
+        state: started
+
+    - name: Reboot worker node if needed
+      ansible.builtin.reboot:
+        msg: "Rebooting after OS updates"
+        connect_timeout: 30
+        reboot_timeout: 900
+        pre_reboot_delay: 5
+        post_reboot_delay: 20
+      when:
+        - reboot_if_needed | bool
+        - dnf_update_result is changed or dnf_autoremove_result is changed or (run_distro_sync | bool and dnf_distro_sync_result is changed)
+
+    - name: Wait for SSH to become reachable after reboot
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: 300
+      when:
+        - reboot_if_needed | bool
+        - dnf_update_result is changed or dnf_autoremove_result is changed or (run_distro_sync | bool and dnf_distro_sync_result is changed)
+
+    - name: Verify kubelet service after maintenance
+      ansible.builtin.systemd:
+        name: kubelet
+      register: kubelet_after
+
+    - name: Verify containerd service after maintenance
+      ansible.builtin.systemd:
+        name: containerd
+      register: containerd_after
+
+    - name: Capture root filesystem usage after maintenance
+      ansible.builtin.command: df -h /
+      register: rootfs_after
+      changed_when: false
+
+    - name: Confirm required services are active
+      ansible.builtin.assert:
+        that:
+          - kubelet_after.status.ActiveState == 'active'
+          - containerd_after.status.ActiveState == 'active'
+        fail_msg: "kubelet/containerd is not active after maintenance on {{ inventory_hostname }}"
+        success_msg: "kubelet/containerd healthy after maintenance on {{ inventory_hostname }}"
+
+    - name: Uncordon node after maintenance
+      ansible.builtin.command: "{{ kubectl_binary }} uncordon {{ kube_node_name }}"
+      register: uncordon_result
+      changed_when: "'already uncordoned' not in uncordon_result.stdout"
+      delegate_to: localhost
+      become: false
+      when: drain_node_before_maintenance | bool
+
+    - name: Wait for node to be Ready in Kubernetes
+      ansible.builtin.command: "{{ kubectl_binary }} wait --for=condition=Ready node/{{ kube_node_name }} --timeout={{ kubectl_wait_timeout }}"
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      when: drain_node_before_maintenance | bool
+
+    - name: Confirm node is ready for next rollout step
+      ansible.builtin.debug:
+        msg:
+          - "{{ inventory_hostname }} update complete"
+          - "kube_node_name={{ kube_node_name }}"
+          - "kubelet={{ kubelet_after.status.ActiveState | default('unknown') }}"
+          - "containerd={{ containerd_after.status.ActiveState | default('unknown') }}"
+          - "rootfs_after={{ rootfs_after.stdout_lines | default([]) }}"
