@@ -1,3 +1,86 @@
+---
+- name: Full OS update for devbox
+  hosts: control_plane
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Refresh DNF package metadata cache
+      ansible.builtin.command: dnf -y makecache
+      changed_when: false
+
+    - name: Check available package updates
+      ansible.builtin.command: dnf -q check-update
+      register: dnf_check_update
+      changed_when: dnf_check_update.rc == 100
+      failed_when: dnf_check_update.rc not in [0, 100]
+
+    - name: Show available updates
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            (['Updates available:'] + (dnf_check_update.stdout_lines | default([])))
+            if dnf_check_update.rc == 100
+            else ['No package updates pending.']
+          }}
+
+    - name: Upgrade all packages
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: dnf_update_result
+
+    - name: Run distro-sync
+      ansible.builtin.command: dnf -y distro-sync
+      register: dnf_distro_sync_result
+      changed_when: >-
+        ('Nothing to do.' not in dnf_distro_sync_result.stdout)
+        and ('Nothing to do.' not in dnf_distro_sync_result.stderr)
+
+    - name: Remove obsolete dependencies
+      ansible.builtin.dnf:
+        autoremove: true
+      register: dnf_autoremove_result
+
+    - name: Clean DNF cache
+      ansible.builtin.command: dnf -y clean all
+      changed_when: false
+
+    - name: Show transaction summary
+      ansible.builtin.command: dnf -q history info last
+      register: dnf_last_transaction
+      changed_when: false
+      when: dnf_update_result is changed or dnf_autoremove_result is changed
+
+    - name: Reboot if packages were updated
+      ansible.builtin.reboot:
+        msg: "Rebooting after OS updates"
+        connect_timeout: 30
+        reboot_timeout: 900
+        pre_reboot_delay: 5
+        post_reboot_delay: 20
+      when: dnf_update_result is changed or dnf_autoremove_result is changed
+      
+
+    - name: Wait for SSH after reboot
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: 300
+      when: dnf_update_result is changed or dnf_autoremove_result is changed
+
+    - name: Capture disk usage after maintenance
+      ansible.builtin.command: df -h /
+      register: rootfs_after
+      changed_when: false
+
+    - name: Post-maintenance summary
+      ansible.builtin.debug:
+        msg:
+          - "devbox update complete"
+          - "rootfs={{ rootfs_after.stdout_lines }}"
+
+
 - name: Regular updates on all nodes
   hosts: all
   become: yes
