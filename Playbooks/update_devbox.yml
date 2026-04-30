@@ -1,0 +1,83 @@
+---
+- name: Update Kubernetes tools and Podman on devbox
+  hosts: control_plane
+  become: true
+  gather_facts: false
+
+  tasks:
+    # Podman
+    - name: Update Podman
+      ansible.builtin.dnf:
+        name: podman
+        state: latest
+      register: podman_update_result
+
+    - name: Show Podman version
+      ansible.builtin.command: podman --version
+      changed_when: false
+      register: podman_version
+
+    # kubectl
+    - name: Get latest kubectl version
+      ansible.builtin.uri:
+        url: https://dl.k8s.io/release/stable.txt
+        return_content: true
+      register: kubectl_latest_version
+      become: false
+
+    - name: Download latest kubectl
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_latest_version.content | trim }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+        force: true
+
+    - name: Show kubectl version
+      ansible.builtin.command: /usr/local/bin/kubectl version --client
+      changed_when: false
+      register: kubectl_version
+
+    # Helm
+    - name: Get latest Helm version
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/helm/helm/releases/latest
+        return_content: true
+      register: helm_latest
+      become: false
+
+    - name: Download and install latest Helm
+      ansible.builtin.shell: |
+        VERSION={{ (helm_latest.content | from_json).tag_name }}
+        curl -fsSL https://get.helm.sh/helm-${VERSION}-linux-amd64.tar.gz | tar -xz
+        mv linux-amd64/helm /usr/local/bin/helm
+        rm -rf linux-amd64
+      args:
+        chdir: /tmp
+      changed_when: true
+
+    - name: Show Helm version
+      ansible.builtin.command: /usr/local/bin/helm version
+      changed_when: false
+      register: helm_version
+
+    # eksctl
+    - name: Download and install latest eksctl
+      ansible.builtin.shell: |
+        curl -fsSL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar -xz
+        mv eksctl /usr/local/bin/eksctl
+      args:
+        chdir: /tmp
+      changed_when: true
+
+    - name: Show eksctl version
+      ansible.builtin.command: /usr/local/bin/eksctl version
+      changed_when: false
+      register: eksctl_version
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "podman={{ podman_version.stdout }}"
+          - "kubectl={{ kubectl_version.stdout }}"
+          - "helm={{ helm_version.stdout }}"
+          - "eksctl={{ eksctl_version.stdout }}"
